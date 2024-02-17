@@ -35,5 +35,9 @@ a proper CI/CD when the time for that comes.
 ### To-do:
 - Clean up my @app.(method) so that the OpenAPI docs generated for them are accurate.
 - Add tests so that I can confirm my request handlers work.
-### Local tests as of 10pm Sat:
-![alt text](https://imgur.com/a/9iNuZ8K "photo")
+### Local tests using manual tests on live db as of 10pm Sat:
+![alt text](https://i.ibb.co/7KdbdwQ/Screenshot-557.png "photo")
+
+### State of my pytest setup:
+My pytest setup is currently incomplete - trying to get it to prepopulate the mock db. If that fails, will set up and make it
+connect to MongoDB Altas to test on a live db in worst case scenario. At least it shows I throw 500/400/404 codes as expected though...

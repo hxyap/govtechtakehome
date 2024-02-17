@@ -25,6 +25,7 @@ from uuid import UUID, uuid4
 import tiktoken
 from beanie import init_beanie, Document
 from motor.motor_asyncio import AsyncIOMotorClient
+# from mongomock_motor import AsyncMongoMockClient
 from collections import defaultdict
 
 # initialize chatgpt client
@@ -82,14 +83,18 @@ client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 # count number of tokens used by conversation
 encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
-
 async def init_database():
+    # if os.getenv("TEST_ENV") == "True":
+    #     # Use mongomock_motor for tests
+    #     db_client = AsyncMongoMockClient()
+    # else:
+    #     # Use the actual MongoDB client for production/development
     db_client = AsyncIOMotorClient(os.environ["MONGODB_URL"])
+    
     db = db_client["govtech_backend"]
     await init_beanie(database=db, document_models=[ConversationFull])
 
 
-# Add a startup event handler to call init_database when the app starts
 @app.on_event("startup")
 async def startup_event():
     await init_database()
@@ -264,14 +269,14 @@ async def update_conversation(id: UUID, convo_update: ConversationPUT):
                 }
             },
         },
-        400: {
-            "model": InvalidParametersError,
-            "description": "Invalid Parameters Error",
+        404: {
+            "model": NotFoundError,
+            "description": "Specified resource(s) was not found",
             "content": {
                 "application/json": {
                     "example": {
-                        "code": 400,
-                        "message": "Parameters were invalid for the endpoint.",
+                        "code": 404,
+                        "message": "Specified resource(s) was not found",
                     }
                 }
             },
