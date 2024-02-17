@@ -5,7 +5,7 @@ from dotenv import load_dotenv, find_dotenv
 from openai import OpenAI
 from models import Conversation, ConversationFull, ConversationPOST, \
     Prompt, QueryRoleType, CreatedResponse, InternalServerError, \
-    NotFoundError
+    NotFoundError, DeletedResponse
 import os
 from uuid import UUID, uuid4
 import tiktoken
@@ -79,8 +79,28 @@ async def get_conversation(id: UUID = Path(..., description="The UUID of the con
         if not convo:
             raise NotFoundError(details={e})
         return convo
+    except NotFoundError as e:
+        raise e
     except Exception as e:
-        return InternalServerError(details={e})
+        raise InternalServerError(details={e})
+    
+    # could not get this to work with DeletedResponse???
+@app.delete("/conversations/{id}", status_code = 204)
+async def delete_conversation(id: UUID = Path(..., description="The UUID of the conversation to retrieve")):
+    """
+    Deletes the specified conversation by ID.
+    """
+    # Fetch conversation from database or storage
+    try:
+        found_convo = await ConversationFull.find_one(ConversationFull.id == id)
+        print(found_convo)
+        if isinstance(found_convo,None):
+            raise NotFoundError(details={e})
+        await found_convo.delete()
+    except NotFoundError as e:
+        raise e
+    except Exception as e:
+        raise InternalServerError(details={e})
 #do this later
 # @app.post("/queries", response_model=Prompt)
 # async def create_query(query: Prompt):

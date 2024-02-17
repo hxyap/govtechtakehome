@@ -12,8 +12,10 @@ Additional modules:
 6 DELETE /conversations/{id} similar to GET.
 I used tiktoken to count the number of tokens consumed.
 
-### update from 9.47pm me:
-# refactored my personal code to only use app.py D: no more /endpoints, too optimistic, but ideally use routing to /endpoints?
-# Single Responsibility and all that!!!
-### update from 1am me: decided to return a str (mongodb's ObjectID) instead of a UUID since no time.
-# link to discussion on SO:     https://stackoverflow.com/questions/28895067/using-uuids-instead-of-objectids-in-mongodb
+### 9.47pm fri
+ refactored my personal code to only use app.py D: no more /endpoints, too optimistic, but ideally use routing to /endpoints?
+ Single Responsibility and all that!!!
+### 1am sat: decided to return a str (mongodb's ObjectID) instead of a UUID since no time.
+link to discussion on SO:     https://stackoverflow.com/questions/28895067/using-uuids-instead-of-objectids-in-mongodb
+### 1pm sat
+may consider consider using Pydantic BaseException (no docs on this???) or Exception that inherits from smth else.
