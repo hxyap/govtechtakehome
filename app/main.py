@@ -1,11 +1,13 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Path
 from typing import List
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv, find_dotenv
 from openai import OpenAI
-from models import Conversation, ConversationFull, ConversationPOST, Prompt, QueryRoleType, CreatedResponse, InternalServerError  # Adjust the import path as needed
+from models import Conversation, ConversationFull, ConversationPOST, \
+    Prompt, QueryRoleType, CreatedResponse, InternalServerError, \
+    NotFoundError
 import os
-import json
+from uuid import UUID, uuid4
 import tiktoken
 from beanie import init_beanie, Document
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -66,6 +68,19 @@ async def create_conversation(convo: ConversationPOST):
     except Exception as e:
         return InternalServerError(details={e})
 
+@app.get("/conversations/{id}", response_model=ConversationFull, status_code=200)
+async def get_conversation(id: UUID = Path(..., description="The UUID of the conversation to retrieve")):
+    """
+    Retrieves the Conversation History by ID
+    """
+    # Fetch conversation from database or storage
+    try:
+        convo = await ConversationFull.find(ConversationFull.id == id).first_or_none()
+        if not convo:
+            raise NotFoundError(details={e})
+        return convo
+    except Exception as e:
+        return InternalServerError(details={e})
 #do this later
 # @app.post("/queries", response_model=Prompt)
 # async def create_query(query: Prompt):

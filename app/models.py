@@ -10,10 +10,20 @@ class APIError(BaseModel):
     request: Optional[Dict[str, Any]] = Field(None, description="Request details associated with the error")
     details: Optional[Dict[str, Any]] = Field(None, description="Other details associated with the error")
 
+class InvalidParametersError(APIError):
+    code: int = Field(400, description="API Error code associated with the error")
+    message: str = Field("Invalid parameters provided", description="Error message associated with the error")
 class InternalServerError(APIError):
     code: int = Field(500, description="API Error code associated with the error")
     message: str = Field("Internal server error", description="Error message associated with the error")
 
+class NotFoundError(APIError):
+    code: int = Field(404, description="API Error code associated with the error")
+    message: str = Field("Specified resource(s) was not found", description="Error message associated with the error")
+
+class InvalidCreationError(APIError):
+    code: int = Field(422, description="API Error code associated with the error")
+    message: str = Field("Unable to create resource due to errors", description="Error message associated with the error")
 class QueryRoleType(str, Enum):
     system = 'system'
     user = 'user'
