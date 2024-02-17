@@ -21,6 +21,10 @@ I used tiktoken to count the number of tokens consumed.
 By right, should be using AsyncMotorMockClient + pytest with mongomock or smth to test.
 However, atm can be testing using manual_conv_api_test.py.
 Instructions on WSL2 Ubuntu 20.04, with python 3.10,
+- Make sure your .env file has two variables:
+- OPENAI_API_KEY= (your openai key)
+- MONGODB_URL=mongodb://root:example@mongo:27017/
+- ^ based off [mongo db](https://hub.docker.com/_/mongo)
 - Start in /backend-app.
 - Run "docker-compose up" in powershell/Ubuntu. This starts up the fastapi server as well as the mongodb docker image from mongo.
 - Then, run "python3.10 -m venv {your venv folder name}" in /backend-app.
@@ -35,9 +39,5 @@ a proper CI/CD when the time for that comes.
 ### To-do:
 - Clean up my @app.(method) so that the OpenAPI docs generated for them are accurate.
 - Add tests so that I can confirm my request handlers work.
-### Local tests using manual tests on live db as of 10pm Sat:
-![alt text](https://i.ibb.co/7KdbdwQ/Screenshot-557.png "photo")
-
-### State of my pytest setup:
-My pytest setup is currently incomplete - trying to get it to prepopulate the mock db. If that fails, will set up and make it
-connect to MongoDB Altas to test on a live db in worst case scenario. At least it shows I throw 500/400/404 codes as expected though...
+### Local tests as of 10pm Sat:
+![Test Image](https://i.ibb.co/7KdbdwQ/Screenshot-557.png)
