@@ -21,6 +21,10 @@ I used tiktoken to count the number of tokens consumed.
 By right, should be using AsyncMotorMockClient + pytest with mongomock or smth to test.
 However, atm can be testing using manual_conv_api_test.py.
 Instructions on WSL2 Ubuntu 20.04, with python 3.10,
+- Make sure your .env file has two variables:
+- OPENAI_API_KEY= (your openai key)
+- MONGODB_URL=mongodb://root:example@mongo:27017/
+- ^ based off [mongo db](https://hub.docker.com/_/mongo)
 - Start in /backend-app.
 - Run "docker-compose up" in powershell/Ubuntu. This starts up the fastapi server as well as the mongodb docker image from mongo.
 - Then, run "python3.10 -m venv {your venv folder name}" in /backend-app.
