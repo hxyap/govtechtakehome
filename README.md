@@ -36,4 +36,4 @@ a proper CI/CD when the time for that comes.
 - Clean up my @app.(method) so that the OpenAPI docs generated for them are accurate.
 - Add tests so that I can confirm my request handlers work.
 ### Local tests as of 10pm Sat:
-![alt text](https://imgur.com/a/9iNuZ8K "photo")
+![Test Image](https://i.ibb.co/7KdbdwQ/Screenshot-557.png)
