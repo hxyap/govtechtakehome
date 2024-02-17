@@ -25,6 +25,7 @@ from uuid import UUID, uuid4
 import tiktoken
 from beanie import init_beanie, Document
 from motor.motor_asyncio import AsyncIOMotorClient
+
 # from mongomock_motor import AsyncMongoMockClient
 from collections import defaultdict
 
@@ -83,6 +84,7 @@ client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 # count number of tokens used by conversation
 encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
+
 async def init_database():
     # if os.getenv("TEST_ENV") == "True":
     #     # Use mongomock_motor for tests
@@ -90,7 +92,7 @@ async def init_database():
     # else:
     #     # Use the actual MongoDB client for production/development
     db_client = AsyncIOMotorClient(os.environ["MONGODB_URL"])
-    
+
     db = db_client["govtech_backend"]
     await init_beanie(database=db, document_models=[ConversationFull])
 
@@ -129,7 +131,61 @@ async def health_check():
     return {"status": "healthy"}
 
 
-@app.post("/queries/{id}", response_model=CreatedResponse, status_code=201)
+@app.post(
+    "/queries/{id}",
+    response_model=CreatedResponse,
+    status_code=201,
+    responses={
+        500: {
+            "model": InternalServerError,
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 500,
+                        "message": "Internal server error occurred",
+                    }
+                }
+            },
+        },
+        404: {
+            "model": NotFoundError,
+            "description": "Specified resource(s) was not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 404,
+                        "message": "Specified resource(s) was not found",
+                    }
+                }
+            },
+        },
+        400: {
+            "model": InvalidParametersError,
+            "description": "Invalid Parameters Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 400,
+                        "message": "Invalid parameters provided",
+                    }
+                }
+            },
+        },
+        422: {
+            "model": InvalidCreationError,
+            "description": "Unable to create resource due to errors",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 400,
+                        "message": "Unable to create resource.",
+                    }
+                }
+            },
+        },
+    },
+)
 async def update_conversation_prompts(id: UUID, user_prompt: Prompt):
     """
     Adds the user prompt and gpt response to ConversationFull object
@@ -211,7 +267,25 @@ async def create_conversation(convo: ConversationPOST):
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
-@app.get("/conversations", response_model=List[ConversationFull], status_code=200)
+@app.get(
+    "/conversations",
+    response_model=List[ConversationFull],
+    status_code=200,
+    responses={
+        500: {
+            "model": InternalServerError,
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 500,
+                        "message": "Internal server error occurred",
+                    }
+                }
+            },
+        },
+    },
+)
 async def get_all_conversations():
     """
     Takes in: probably user header through JWT or smth haha
@@ -229,7 +303,48 @@ async def get_all_conversations():
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
-@app.put("/conversations/{id}", status_code=204)
+@app.put(
+    "/conversations/{id}",
+    status_code=204,
+    responses={
+        500: {
+            "model": InternalServerError,
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 500,
+                        "message": "Internal server error occurred",
+                    }
+                }
+            },
+        },
+        404: {
+            "model": NotFoundError,
+            "description": "Specified resource(s) was not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 404,
+                        "message": "Specified resource(s) was not found",
+                    }
+                }
+            },
+        },
+        400: {
+            "model": InvalidParametersError,
+            "description": "Invalid Parameters Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 400,
+                        "message": "Parameters were invalid for the endpoint.",
+                    }
+                }
+            },
+        },
+    },
+)
 async def update_conversation(id: UUID, convo_update: ConversationPUT):
     """
     Takes in: JSON Body formatted as a Conversation
@@ -304,7 +419,36 @@ async def get_conversation(
         )
 
 
-@app.delete("/conversations/{id}", status_code=204)
+@app.delete(
+    "/conversations/{id}",
+    status_code=204,
+    responses={
+        500: {
+            "model": InternalServerError,
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 500,
+                        "message": "Internal server error occurred",
+                    }
+                }
+            },
+        },
+        404: {
+            "model": NotFoundError,
+            "description": "Specified resource(s) was not found",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 404,
+                        "message": "Specified resource(s) was not found",
+                    }
+                }
+            },
+        },
+    },
+)
 async def delete_conversation(
     id: UUID = Path(..., description="The UUID of the conversation to retrieve")
 ):
