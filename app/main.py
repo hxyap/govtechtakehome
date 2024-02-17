@@ -51,6 +51,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         request={"path": str(request.url)},  # Example of including request details
         details=dict(error_details_dict),
     )
+    print(error_message)
     return JSONResponse(
         status_code=400,
         content={"code": error_message.code, "message": error_message.message},
@@ -70,6 +71,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         error_message = InternalServerError(details={"info": exc.detail})
     else:
         error_message = APIError(code=exc.status_code, message=exc.detail)
+    print(error_message)
     return JSONResponse(
         status_code=error_message.code,
         content={"code": error_message.code, "message": error_message.message},
@@ -128,7 +130,8 @@ async def update_conversation_prompts(id: UUID, user_prompt: Prompt):
     Adds the user prompt and gpt response to ConversationFull object
     """
     convo = await ConversationFull.get(id)
-    if not convo:
+    print(convo)
+    if convo is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     old_tokens = convo.tokens
     prompt_tokens = len(encoding.encode(user_prompt.content))
@@ -286,7 +289,7 @@ async def get_conversation(
         print(type(id))
         convo = await ConversationFull.get(id)
         print(convo)
-        if not convo:
+        if convo is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
         return convo
     except Exception as e:

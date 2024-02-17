@@ -1,3 +1,5 @@
+# GovTech AI Bots Backend Take-home submission
+This was written for the takehome assignment for GovTech in 2024 Feb.
 Initial implementation thoughts:
 My mental model of the user flow was this:
 1. User sends in POST to /conversations, which passes them a Conversation id and they are routed to their specific /conversation/{id}.
@@ -14,8 +16,24 @@ I used tiktoken to count the number of tokens consumed.
 
 ### 9.47pm fri
  refactored my personal code to only use app.py D: no more /endpoints, too optimistic, but ideally use routing to /endpoints?
- Single Responsibility and all that!!!
-### 1am sat: decided to return a str (mongodb's ObjectID) instead of a UUID since no time.
-link to discussion on SO:     https://stackoverflow.com/questions/28895067/using-uuids-instead-of-objectids-in-mongodb
-### 1pm sat
-may consider consider using Pydantic BaseException (no docs on this???) or Exception that inherits from smth else.
+ This would make my main.py easier to read.
+### 9pm sat:
+By right, should be using AsyncMotorMockClient + pytest with mongomock or smth to test.
+However, atm can be testing using manual_conv_api_test.py.
+Instructions on WSL2 Ubuntu 20.04, with python 3.10,
+- Start in /backend-app.
+- Run "docker-compose up" in powershell/Ubuntu. This starts up the fastapi server as well as the mongodb docker image from mongo.
+- Then, run "python3.10 -m venv {your venv folder name}" in /backend-app.
+- Afterwards, run "source {your venv folder name}/bin/activate" to activate your venv.
+- after app and mongodb are running, in a different Terminal on WSL2 on VSCode/ other platforms, 
+  cd into cd app/tests, then run "python manual_conv_api_test.py" which will print and show the relevant results for all 
+  endpoint methods.
+I intend to replace this with automated testing w/ pytest mocks + AsyncMongoMockClient so that this is ready for testing thru
+a proper CI/CD when the time for that comes.
+
+
+### To-do:
+- Clean up my @app.(method) so that the OpenAPI docs generated for them are accurate.
+- Add tests so that I can confirm my request handlers work.
+### Local tests as of 10pm Sat:
+![Testing default expected response](https://imgur.com/a/9iNuZ8K)
