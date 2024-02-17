@@ -5,7 +5,7 @@ from dotenv import load_dotenv, find_dotenv
 from openai import OpenAI
 from models import Conversation, ConversationFull, ConversationPOST, \
     Prompt, QueryRoleType, CreatedResponse, InternalServerError, \
-    NotFoundError, DeletedResponse
+    NotFoundError, DeletedResponse, ConversationPUT
 import os
 from uuid import UUID, uuid4
 import tiktoken
@@ -68,6 +68,31 @@ async def create_conversation(convo: ConversationPOST):
     except Exception as e:
         return InternalServerError(details={e})
 
+@app.put("/conversations/{id}", status_code=204)
+async def update_conversation(id: UUID, convo_update: ConversationPUT):
+    """
+      Takes in: JSON Body formatted as a Conversation
+      Returns: Convo UUID.
+    """
+    # Find the conversation by ID
+    try:
+        # Find the conversation by ID
+        convo = await ConversationFull.find_one(Conversation.id == id)
+        if not convo:
+            raise NotFoundError(details={"error": "Conversation not found"})
+
+        await convo.set({ConversationFull.name: convo_update.name, ConversationFull.params: convo_update.params})
+
+    except NotFoundError as e:
+        # It's better to directly raise HTTPException for FastAPI to handle
+        raise HTTPException(status_code=404, detail=str(e.details))
+    except InternalServerError as e:
+        # Log the exception details here, if logging is set up
+        # It's not recommended to return the exception details directly to the client for security reasons
+        raise HTTPException(status_code=500, detail="Internal server error")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Internal server error")
+    
 @app.get("/conversations/{id}", response_model=ConversationFull, status_code=200)
 async def get_conversation(id: UUID = Path(..., description="The UUID of the conversation to retrieve")):
     """
