@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Path, Request
 from typing import List
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from dotenv import load_dotenv, find_dotenv
 from openai import AsyncOpenAI
 from models import (
@@ -16,6 +17,8 @@ from models import (
     DeletedResponse,
     ConversationPUT,
     InvalidParametersError,
+    APIError,
+    InvalidCreationError,
 )
 import os
 from uuid import UUID, uuid4
@@ -29,22 +32,49 @@ load_dotenv(find_dotenv())
 
 app = FastAPI()
 
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Specifically catches bad parameters, as other sections like /queries may throw 422 due to issues with creating or sending
+    the Prompt. Thus, instead of catching all 422s, I will specifically catch request validation here.
+    """
     error_details_dict = defaultdict(list)
 
     for e in exc.errors():
-        loc_str = "->".join(str(part) for part in e["loc"])  # Convert location to string key
+        loc_str = "->".join(
+            str(part) for part in e["loc"]
+        )  # Convert location to string key
         error_details_dict[loc_str].append(e["msg"])
 
     error_message = InvalidParametersError(
         request={"path": str(request.url)},  # Example of including request details
-        details=dict(error_details_dict)
+        details=dict(error_details_dict),
     )
     return JSONResponse(
         status_code=400,
-        content={"code": error_message.code, "errors": error_message.message}
+        content={"code": error_message.code, "message": error_message.message},
     )
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        error_message = (
+            NotFoundError()
+        )  # by right i should dump the request in here but no time :(
+    # Fallback: return the default response for other HTTP errors
+    elif exc.status_code == 422:
+        error_message = InvalidCreationError()
+    elif exc.status_code == 500:
+        error_message = InternalServerError(details={"info": exc.detail})
+    else:
+        error_message = APIError(code=exc.status_code, message=exc.detail)
+    return JSONResponse(
+        status_code=error_message.code,
+        content={"code": error_message.code, "message": error_message.message},
+    )
+
 
 client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 # count number of tokens used by conversation
@@ -82,7 +112,7 @@ async def get_chatgpt_response(
         model_response = response.choices[0].message.content
         resp_as_prompt = Prompt(role=model_role, content=model_response)
     except Exception as e:
-        raise InternalServerError()
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
     return resp_as_prompt
 
@@ -97,7 +127,7 @@ async def update_conversation_prompts(id: UUID, user_prompt: Prompt):
     """
     Adds the user prompt and gpt response to ConversationFull object
     """
-    convo = await ConversationFull.find_one(ConversationFull.id == id)
+    convo = await ConversationFull.get(id)
     if not convo:
         raise HTTPException(status_code=404, detail="Conversation not found")
     old_tokens = convo.tokens
@@ -170,12 +200,11 @@ async def create_conversation(convo: ConversationPOST):
         print(res)
         return {"id": str(convo_full.id)}
     except Exception as e:
-        error_response = InternalServerError(code=500, message=str(e))
-        return JSONResponse(status_code=500, content=error_response.dict())
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
 @app.get("/conversations", response_model=List[ConversationFull], status_code=200)
-async def update_conversation():
+async def get_all_conversations():
     """
     Takes in: probably user header through JWT or smth haha
     Returns: User's Conversation as a List
@@ -189,7 +218,7 @@ async def update_conversation():
         return conversations
     except Exception as e:
         # Log the exception details here if logging is set up
-        return InternalServerError(details={e})
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
 @app.put("/conversations/{id}", status_code=204)
@@ -201,9 +230,9 @@ async def update_conversation(id: UUID, convo_update: ConversationPUT):
     # Find the conversation by ID
     try:
         # Find the conversation by ID
-        convo = await ConversationFull.find_one(Conversation.id == id)
+        convo = await ConversationFull.get(id)
         if not convo:
-            raise NotFoundError(details={"error": "Conversation not found"})
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
         await convo.set(
             {
@@ -211,19 +240,41 @@ async def update_conversation(id: UUID, convo_update: ConversationPUT):
                 ConversationFull.params: convo_update.params,
             }
         )
-
-    except NotFoundError as e:
-        # It's better to directly raise HTTPException for FastAPI to handle
-        raise HTTPException(status_code=404, detail=str(e.details))
-    except InternalServerError as e:
-        # Log the exception details here, if logging is set up
-        # It's not recommended to return the exception details directly to the client for security reasons
-        raise HTTPException(status_code=500, detail="Internal server error")
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Internal server error")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
-@app.get("/conversations/{id}", response_model=ConversationFull, status_code=200)
+@app.get(
+    "/conversations/{id}",
+    response_model=ConversationFull,
+    status_code=200,
+    responses={
+        500: {
+            "model": InternalServerError,
+            "description": "Internal Server Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 500,
+                        "message": "Internal server error occurred",
+                    }
+                }
+            },
+        },
+        400: {
+            "model": InvalidParametersError,
+            "description": "Invalid Parameters Error",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "code": 400,
+                        "message": "Parameters were invalid for the endpoint.",
+                    }
+                }
+            },
+        },
+    },
+)
 async def get_conversation(
     id: UUID = Path(..., description="The UUID of the conversation to retrieve")
 ):
@@ -232,16 +283,17 @@ async def get_conversation(
     """
     # Fetch conversation from database or storage
     try:
-        convo = await ConversationFull.find(ConversationFull.id == id).first_or_none()
+        print(type(id))
+        convo = await ConversationFull.get(id)
+        print(convo)
         if not convo:
-            raise NotFoundError(details={e})
+            raise HTTPException(status_code=404, detail="Conversation not found")
         return convo
-    except NotFoundError as e:
-        raise e
     except Exception as e:
-        raise InternalServerError(details={e})
-
-    # could not get this to work with DeletedResponse???
+        print(e)
+        raise HTTPException(
+            status_code=500, detail=f"Server Error occured with get_conversation: {e}"
+        )
 
 
 @app.delete("/conversations/{id}", status_code=204)
@@ -253,15 +305,14 @@ async def delete_conversation(
     """
     # Fetch conversation from database or storage
     try:
-        found_convo = await ConversationFull.find_one(ConversationFull.id == id)
+        found_convo = await ConversationFull.get(id)
         print(found_convo)
-        if isinstance(found_convo, None):
-            raise NotFoundError(details={e})
+        if found_convo is None:
+            raise HTTPException(status_code=404, detail="Conversation not found")
         await found_convo.delete()
-    except NotFoundError as e:
-        raise e
     except Exception as e:
-        raise InternalServerError(details={e})
+        print(e)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
 # do this later
