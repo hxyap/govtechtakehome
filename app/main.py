@@ -68,6 +68,23 @@ async def create_conversation(convo: ConversationPOST):
     except Exception as e:
         return InternalServerError(details={e})
 
+@app.get("/conversations",  response_model=List[ConversationFull], status_code = 200)
+async def update_conversation():
+    """
+      Takes in: probably user header through JWT or smth haha
+      Returns: User's Conversation as a List
+    """
+    try:
+        # Assuming you have a mechanism to authenticate and identify the user making the request
+        # Replace `find_many` with the correct method based on your database driver or ORM
+        conversations = await ConversationFull.find().to_list()
+        if not conversations:
+            return []  # Return an empty list if no conversations are found
+        return conversations
+    except Exception as e:
+        # Log the exception details here if logging is set up
+        return InternalServerError(details={e})
+
 @app.put("/conversations/{id}", status_code=204)
 async def update_conversation(id: UUID, convo_update: ConversationPUT):
     """
