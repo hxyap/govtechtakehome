@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Path
 from typing import List
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv, find_dotenv
-from openai import OpenAI
+from openai import AsyncOpenAI
 from models import Conversation, ConversationFull, ConversationPOST, \
     Prompt, QueryRoleType, CreatedResponse, InternalServerError, \
     NotFoundError, DeletedResponse, ConversationPUT
@@ -16,7 +16,7 @@ load_dotenv(find_dotenv())
 
 app = FastAPI()
 
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 # count number of tokens used by conversation
 encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
@@ -32,27 +32,58 @@ async def startup_event():
     await init_database()
 
 # Your endpoint definitions using Prompt and QueryRoleType
-async def get_chatgpt_response(conversation_history: List[Prompt], query_message: str, params) -> str:
+async def get_chatgpt_response(conversation_history: List[Prompt], query_message: Prompt, params) -> str:
     # Convert conversation_history to the format expected by OpenAI
-    messages_formatted = [{"role": msg.role, "content": msg.content} for msg in conversation_history]
-    messages_formatted.append({"role": "user", "content": query_message})
+    conversation_history.append(query_message)
+    temp = params.get("temperature", 0.35)
 
     try:
         response = await client.chat.completions.create(
             model="gpt-3.5-turbo-0125",
-            messages=messages_formatted,
-            temperature=params.temperature,
-            max_tokens=params.max_tokens
+            messages=conversation_history,
+            temperature=temp,
+            # max_tokens=params.max_tokens
         )
-        model_response = response.choices[0].message['content']
+        model_role = response.choices[0].message.role
+        model_response = response.choices[0].message.content
+        resp_as_prompt = Prompt(role=model_role, content=model_response)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OpenAI API request failed: {str(e)}")
+        raise InternalServerError()
 
-    return model_response
+    return resp_as_prompt
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.post("/queries/{id}", response_model=CreatedResponse, status_code=201)
+async def update_conversation_prompts(id: UUID, user_prompt: Prompt):
+    """
+    Adds the user prompt and gpt response to ConversationFull object
+    """
+    convo = await ConversationFull.find_one(ConversationFull.id == id)
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    old_tokens = convo.tokens
+    prompt_tokens = len(encoding.encode(user_prompt.content))
+    new_token_count = old_tokens + prompt_tokens
+    # send message to chatgpt
+    gpt_response = await get_chatgpt_response(conversation_history=convo.messages,
+                                        query_message=user_prompt,
+                                        params=convo.params)
+    # Append the new reply to the messages list
+
+    # updated_messages = convo.messages.extend([user_prompt, gpt_response])    # Assuming user_prompt and gpt_response are objects you want to add to the conversation
+    new_messages = convo.messages + [gpt_response]
+
+    print(convo.messages)
+    print(new_messages)
+    # Save/update the conversation in the database
+    # The specific method to do this will depend on your database library
+    await convo.set({ConversationFull.messages: new_messages,
+                      ConversationFull.tokens: new_token_count})
+
+    return {"id": str(convo.id)} 
 
 @app.post("/conversations", response_model=CreatedResponse, status_code=201)
 async def create_conversation(convo: ConversationPOST):

@@ -38,7 +38,7 @@ class Conversation(Document):
     id: UUID = Field(default_factory=uuid4, description="ID of the conversation", alias="_id")
     name: str = Field(..., description="Title of the conversation", max_length=200)
     params: Dict[str, Any] = Field(..., description="Parameter dictionary for overriding defaults prescribed by the AI Model")
-    tokens: Optional[int] = Field(None, description="Total number of tokens consumed in this entire Chat", ge=0, readOnly=True)
+    tokens: Optional[int] = Field(0, description="Total number of tokens consumed in this entire Chat", ge=0, readOnly=True)
 
 class ConversationFull(Conversation):
     messages: Optional[List[Prompt]] = Field(..., description="Chat messages to be included")
