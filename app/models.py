@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, List
 from enum import Enum
 from uuid import uuid4, UUID
 
-class APIError(Exception):
+class APIError(BaseModel):
     code: int = Field(..., description="API Error code associated with the error")
     message: str = Field(..., description="Error message associated with the error")
     request: Optional[Dict[str, Any]] = Field(None, description="Request details associated with the error")
