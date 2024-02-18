@@ -102,14 +102,22 @@ async def startup_event():
     await init_database()
 
 
-# Your endpoint definitions using Prompt and QueryRoleType
 async def get_chatgpt_response(
     conversation_history: List[Prompt], query_message: Prompt, params
 ) -> str:
-    # Convert conversation_history to the format expected by OpenAI
+    '''
+      Takes in:
+        Conversation_History, a List of Prompts from the given Conversation id in PATH
+        query_message, a Prompt from the user's original request body at /queries/{id}
+        params, the other params obtained from the user's conversation object
+      Returns:
+        Model Response as a Prompt object to add the conversation's messages field.
+      Currently params only accepts temperature, but could be modified to accept other parameters like
+      max_tokens, response_format for fitting better to the Prompt model, user from the name field
+      to track which person made which /queries completion.
+    '''
     conversation_history.append(query_message)
     temp = params.get("temperature", 0.35)
-
     try:
         response = await client.chat.completions.create(
             model="gpt-3.5-turbo-0125",
@@ -203,15 +211,10 @@ async def update_conversation_prompts(id: UUID, user_prompt: Prompt):
         query_message=user_prompt,
         params=convo.params,
     )
-    # Append the new reply to the messages list
-
-    # updated_messages = convo.messages.extend([user_prompt, gpt_response])    # Assuming user_prompt and gpt_response are objects you want to add to the conversation
     new_messages = convo.messages + [gpt_response]
 
     print(convo.messages)
     print(new_messages)
-    # Save/update the conversation in the database
-    # The specific method to do this will depend on your database library
     await convo.set(
         {
             ConversationFull.messages: new_messages,
@@ -292,14 +295,11 @@ async def get_all_conversations():
     Returns: User's Conversation as a List
     """
     try:
-        # Assuming you have a mechanism to authenticate and identify the user making the request
-        # Replace `find_many` with the correct method based on your database driver or ORM
         conversations = await ConversationFull.find().to_list()
         if not conversations:
             return []  # Return an empty list if no conversations are found
         return conversations
     except Exception as e:
-        # Log the exception details here if logging is set up
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
@@ -350,9 +350,7 @@ async def update_conversation(id: UUID, convo_update: ConversationPUT):
     Takes in: JSON Body formatted as a Conversation
     Returns: Convo UUID.
     """
-    # Find the conversation by ID
     try:
-        # Find the conversation by ID
         convo = await ConversationFull.get(id)
         if not convo:
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -467,11 +465,6 @@ async def delete_conversation(
         raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
 
 
-# do this later
-# @app.post("/queries", response_model=Prompt)
-# async def create_query(query: Prompt):
-#     # Initialize or fetch the conversation
-#     client_query =
 if __name__ == "__main__":
     import uvicorn
 

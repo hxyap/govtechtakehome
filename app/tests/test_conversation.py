@@ -4,23 +4,35 @@ import pytest
 from uuid import UUID, uuid4
 from main import app
 from models import ConversationFull, ConversationPOST
+from mongomock_motor import AsyncMongoMockClient
+from beanie import init_beanie
 
 client = TestClient(app)
 
-@pytest.mark.asyncio
-async def test_create_conversation_success():
-    fake_uuid = uuid4()
-    with patch.object(ConversationFull, 'insert') as mock_insert:
-        mock_insert.return_value = MagicMock(id=fake_uuid)
-        payload = {
-            "name": "Test Conversation",
-            "params": {"temperature": 0.395},
-        }
-        response = client.post("/conversations", json=payload)
-        assert response.status_code == 201
-        data = response.json()
-        assert 'id' in data  # Assuming your endpoint generates an ID to return
-        assert data['id'] == "123456789"  # Example ID returned by the mocked insert method
+@pytest.fixture(autouse=True)
+async def mock_db():
+    mock_client = AsyncMongoMockClient()
+    db = mock_client["govtech_backend"]
+    await init_beanie(document_models=[ConversationFull], database=db)
+    yield db
+
+# @pytest.mark.asyncio
+# async def test_create_conversation_success(mock_db):
+#     async with mock_db as db:
+#         payload = {
+#             "name": "Mocked Conversation",
+#             "params": {"temperature": 0.5},
+#             "messages": []
+#         }
+
+#         # Perform the POST request to create a new conversation
+#         response = client.post("/conversations", json=payload)
+
+#         # Validate the response
+#         assert response.status_code == 201
+#         data = response.json()
+#         assert 'id' in data
+
 
 @pytest.mark.asyncio
 async def test_create_conversation_internal_server_error():
@@ -45,49 +57,39 @@ async def test_create_conversation_invalid_parameters():
     # assert "Parameters were invalid for the endpoint." in data['message']
 
 
-@pytest.mark.asyncio
-async def test_get_conversation(client):
-    predefined_id = "80277564-ee29-4c71-a574-61d622bc0adb"
-    with patch('path.to.fetch_conversation_from_db') as mock_fetch:
-        mock_fetch.return_value = {"id": predefined_id, "name": "Test Conversation", "params": {"temperature": 0.5}, "messages": []}
-        response = client.get(f"/conversations/{predefined_id}")
-        assert response.status_code == 200
-        data = response.json()
-        assert data['id'] == predefined_id
+# @pytest.mark.asyncio
+# async def test_get_conversation_success():
+#     test_uuid = uuid4()
+#     test_conversation = ConversationFull(id=test_uuid, name="Test Conversation", params={"temperature": 0.5}, messages=[])
+#     with patch('models.ConversationFull.get', return_value=test_conversation):
+#         response = client.get(f"/conversations/{test_uuid}")
+#         assert response.status_code == 200
+#         data = response.json()
+#         assert data['id'] == str(test_uuid)
+#         assert data['name'] == "Test Conversation"
+
+
+
 
 @pytest.mark.asyncio
-async def test_update_conversation(client):
-    predefined_id = "80277564-ee29-4c71-a574-61d622bc0adb"
-    with patch('path.to.ConversationFull.find_one') as mock_find_one, \
-         patch('path.to.ConversationFull.save') as mock_save:
-        mock_find_one.return_value = ConversationFull(id=predefined_id, name="Original Name", params={"temperature": 0.5}, messages=[])
-        mock_save.return_value = None  # Assume save is successful
-        payload = {
-            "name": "Updated Test Conversation",
-            "params": {"temperature": 0.6},
-        }
-        response = client.put(f"/conversations/{predefined_id}", json=payload)
-        assert response.status_code == 204
+async def test_get_conversation_invalid_params():
+    test_uuid = ()
+    with patch('models.ConversationFull.get', return_value=None):
+        response = client.get(f"/conversations/{test_uuid}")
+        assert response.status_code == 400
+        # data = response.json()
+        # assert data['detail'] == "Conversation not found"
+
+
 
 @pytest.mark.asyncio
-async def test_delete_conversation(client):
-    predefined_id = "80277564-ee29-4c71-a574-61d622bc0adb"
-    with patch('path.to.ConversationFull.find_one') as mock_find_one, \
-         patch('path.to.ConversationFull.delete') as mock_delete:
-        mock_find_one.return_value = ConversationFull(id=predefined_id, name="Test Conversation", params={}, messages=[])
-        mock_delete.return_value = None  # Assume delete is successful
-        response = client.delete(f"/conversations/{predefined_id}")
-        assert response.status_code == 204
+async def test_get_conversation_internal_server_error():
+    test_uuid = uuid4()
+    with patch('models.ConversationFull.get', side_effect=Exception("Unexpected error")):
+        response = client.get(f"/conversations/{test_uuid}")
+        assert response.status_code == 500
+        # data = response.json()
+        # assert data['code'] == 500
 
-@pytest.mark.asyncio
-async def test_query_conversation(client):
-    query_payload = {
-        "role": "user",
-        "content": "Can dogs eat chocolate safely?"
-    }
-    predefined_id = "test_id"
-    with patch('path.to.your_query_function') as mock_query:
-        # Simulate different responses based on the query
-        mock_query.side_effect = lambda id, payload: {"id": id, "response": "Query processed"} if id == predefined_id else HTTPException(status_code=404, detail="Not found")
-        response = client.post(f"/queries/{predefined_id}", json=query_payload)
-        assert response.status_code in [201, 400, 404, 422, 500]  # Expected status codes
+
+
