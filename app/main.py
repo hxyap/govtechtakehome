@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from dotenv import load_dotenv, find_dotenv
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 from models import (
     Conversation,
     ConversationFull,
@@ -64,11 +64,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 404:
         error_message = (
-            NotFoundError()
+            NotFoundError(details={"info": exc.detail})
         )  # by right i should dump the request in here but no time :(
     # Fallback: return the default response for other HTTP errors
     elif exc.status_code == 422:
-        error_message = InvalidCreationError()
+        error_message = InvalidCreationError(details={"info": exc.detail})
     elif exc.status_code == 500:
         error_message = InternalServerError(details={"info": exc.detail})
     else:
@@ -78,7 +78,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         status_code=error_message.code,
         content={"code": error_message.code, "message": error_message.message},
     )
-
 
 client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
 # count number of tokens used by conversation
@@ -116,22 +115,24 @@ async def get_chatgpt_response(
       max_tokens, response_format for fitting better to the Prompt model, user from the name field
       to track which person made which /queries completion.
     '''
-    conversation_history.append(query_message)
-    temp = params.get("temperature", 0.35)
     try:
+        conversation_history.append(query_message)
+        temp = params.get("temperature", 0.35)
         response = await client.chat.completions.create(
             model="gpt-3.5-turbo-0125",
             messages=conversation_history,
             temperature=temp,
-            # max_tokens=params.max_tokens
         )
         model_role = response.choices[0].message.role
         model_response = response.choices[0].message.content
-        resp_as_prompt = Prompt(role=model_role, content=model_response)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
-
-    return resp_as_prompt
+        return Prompt(role=model_role, content=model_response)
+    except OpenAIError as e:
+        raise HTTPException(status_code=422, detail=f"OpenAI API error: {e}")
+    except Exception as exc:
+        # Handle other unforeseen exceptions
+        print(f"An error occurred: {exc}")
+        # Consider logging the exception details here
+        raise HTTPException(status_code=500, detail="An internal error occurred while fetching the ChatGPT response.")
 
 
 @app.get("/health")
@@ -198,31 +199,37 @@ async def update_conversation_prompts(id: UUID, user_prompt: Prompt):
     """
     Adds the user prompt and gpt response to ConversationFull object
     """
-    convo = await ConversationFull.get(id)
-    print(convo)
-    if convo is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-    old_tokens = convo.tokens
-    prompt_tokens = len(encoding.encode(user_prompt.content))
-    new_token_count = old_tokens + prompt_tokens
-    # send message to chatgpt
-    gpt_response = await get_chatgpt_response(
-        conversation_history=convo.messages,
-        query_message=user_prompt,
-        params=convo.params,
-    )
-    new_messages = convo.messages + [gpt_response]
+    try:
+        convo = await ConversationFull.get(id)
+        if convo is None:
+            raise HTTPException(status_code=404, detail=f"Conversation not found: {id} by /queries/id")
 
-    print(convo.messages)
-    print(new_messages)
-    await convo.set(
-        {
-            ConversationFull.messages: new_messages,
-            ConversationFull.tokens: new_token_count,
-        }
-    )
+        old_tokens = convo.tokens
+        prompt_tokens = len(encoding.encode(user_prompt.content))
+        new_token_count = old_tokens + prompt_tokens
 
-    return {"id": str(convo.id)}
+        # send message to chatgpt
+        gpt_response = await get_chatgpt_response(
+            conversation_history=convo.messages,
+            query_message=user_prompt,
+            params=convo.params,
+        )
+        new_messages = convo.messages + [gpt_response]
+
+        await convo.set(
+            {
+                ConversationFull.messages: new_messages,
+                ConversationFull.tokens: new_token_count,
+            }
+        )
+
+        return {"id": str(convo.id)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Handle other unforeseen exceptions
+        print(f"An error occurred: {e}")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred: {e}")
 
 
 @app.post(
@@ -361,8 +368,12 @@ async def update_conversation(id: UUID, convo_update: ConversationPUT):
                 ConversationFull.params: convo_update.params,
             }
         )
+        return {"id": str(convo.id)}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+        print(f"An error occurred while updating conversation: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred while updating the conversation: {e}")
 
 
 @app.get(
@@ -396,13 +407,10 @@ async def update_conversation(id: UUID, convo_update: ConversationPUT):
         },
     },
 )
-async def get_conversation(
-    id: UUID = Path(..., description="The UUID of the conversation to retrieve")
-):
+async def get_conversation(id: UUID = Path(..., description="The UUID of the conversation to retrieve")):
     """
-    Retrieves the Conversation History by ID
+    Retrieves the Conversation History by ID.
     """
-    # Fetch conversation from database or storage
     try:
         print(type(id))
         convo = await ConversationFull.get(id)
@@ -410,11 +418,11 @@ async def get_conversation(
         if convo is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
         return convo
+    except HTTPException:
+        raise
     except Exception as e:
-        print(e)
-        raise HTTPException(
-            status_code=500, detail=f"Server Error occured with get_conversation: {e}"
-        )
+        print(f"An error occurred while retrieving conversation: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred while retrieving the conversation")
 
 
 @app.delete(
@@ -447,22 +455,21 @@ async def get_conversation(
         },
     },
 )
-async def delete_conversation(
-    id: UUID = Path(..., description="The UUID of the conversation to retrieve")
-):
+async def delete_conversation(id: UUID = Path(..., description="The UUID of the conversation to retrieve")):
     """
     Deletes the specified conversation by ID.
     """
-    # Fetch conversation from database or storage
     try:
         found_convo = await ConversationFull.get(id)
         print(found_convo)
         if found_convo is None:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail=f"Conversation not found for DELETE /conversations/{id}")
         await found_convo.delete()
+    except HTTPException:
+        raise
     except Exception as e:
-        print(e)
-        raise HTTPException(status_code=500, detail=f"Internal server error: {e}")
+        print(f"An error occurred while deleting conversation: {e}")
+        raise HTTPException(status_code=500, detail=f"An internal error occurred while deleting the conversation{e}")
 
 
 if __name__ == "__main__":
